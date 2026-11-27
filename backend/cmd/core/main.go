@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KPR23/gopark/internal/db"
 	"github.com/KPR23/gopark/internal/httpapi"
 )
 
@@ -23,10 +25,13 @@ func main() {
 	}
 }
 
-// run trzyma całą logikę, dzięki czemu defery (stop, cancel) zawsze się wykonają,
-// a os.Exit jest wołany tylko w main.
 func run(logger *slog.Logger) error {
-	addr := ":" + getenv("PORT", "8080")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return errors.New("DATABASE_URL is not set")
+	}
+
+	addr := ":" + getEnv("PORT", "8080")
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -40,7 +45,13 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// serwer w osobnej goroutine, błąd przez kanał
+	pool, err := db.Connect(ctx, databaseURL)
+	if err != nil {
+		return fmt.Errorf("connect db: %w", err)
+	}
+
+	defer pool.Close()
+
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("server starting", "addr", addr)
@@ -61,7 +72,7 @@ func run(logger *slog.Logger) error {
 	}
 }
 
-func getenv(key, def string) string {
+func getEnv(key, def string) string {
 	if val, ok := os.LookupEnv(key); ok && val != "" {
 		return val
 	}
