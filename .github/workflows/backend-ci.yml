@@ -1,0 +1,50 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      # Download the repository code onto the runner.
+      - uses: actions/checkout@v4
+
+      # Install the Go version declared in go.mod; caches modules and build output.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # Formatting: gofmt -l lists files that are not formatted; any output fails the job.
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need 'gofmt -w':"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # Static analysis: go vet finds suspicious code (e.g. wrong Printf args).
+      - name: Vet
+        run: go vet ./...
+
+      # Compilation: make sure every package builds.
+      - name: Build
+        run: go build ./...
+
+      # Tests: run all unit tests.
+      - name: Test
+        run: go test ./...
